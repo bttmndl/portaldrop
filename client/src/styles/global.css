@@ -513,29 +513,74 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   position: absolute;
   z-index: 3;
   cursor: grab;
-  animation: cutout-lift 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+  animation: cutout-lift 0.8s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+  transform-style: preserve-3d;
 }
 .cutout:active { cursor: grabbing; }
 
+.cutout--ar {
+  padding: 10px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(18px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 24px 60px rgba(8, 10, 24, 0.55);
+}
+
+.cutout__halo {
+  position: absolute;
+  inset: 2px;
+  border-radius: 18px;
+  background: radial-gradient(circle, rgba(45, 214, 255, 0.26), rgba(45, 214, 255, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 .cutout img {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   display: block;
   transition: transform 0.12s ease-out;
-  filter: drop-shadow(0 26px 34px rgba(0, 0, 0, 0.6))
-          drop-shadow(0 0 18px rgba(124, 92, 255, 0.45));
-  animation: cutout-hover 3.4s ease-in-out infinite;
+  filter: drop-shadow(0 34px 44px rgba(0, 0, 0, 0.7))
+          drop-shadow(0 0 24px rgba(45, 214, 255, 0.45))
+          drop-shadow(0 0 40px rgba(124, 92, 255, 0.28));
+  animation: cutout-hover 2.7s ease-in-out infinite;
+}
+
+.cutout__label {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #e9f9ff;
+  background: rgba(5, 8, 18, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  z-index: 2;
+  pointer-events: none;
 }
 
 @keyframes cutout-lift {
-  0% { transform: translateY(26px) scale(0.98); opacity: 0.4; }
-  60% { opacity: 1; }
-  100% { transform: translateY(0) scale(1.04); }
+  0% {
+    transform: translateY(46px) scale(0.92) rotateX(18deg) rotateY(-8deg);
+    opacity: 0.2;
+    filter: blur(10px);
+  }
+  55% { opacity: 1; }
+  100% {
+    transform: translateY(-10px) scale(1.06) rotateX(0deg) rotateY(0deg);
+  }
 }
 
 @keyframes cutout-hover {
-  0%, 100% { translate: 0 0; }
-  50%      { translate: 0 -7px; }
+  0%, 100% { translate: 0 0; transform: translateZ(0) scale(1); }
+  50%      { translate: 0 -12px; transform: translateZ(10px) scale(1.02); }
 }
 
 .cutout__actions {

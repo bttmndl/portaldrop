@@ -106,15 +106,20 @@ export default function Lab() {
       punchHole(result);
       const displayScale = rect.width / canvas.width;
       const { bbox } = result;
+      const cutW = bbox.w * displayScale;
+      const cutH = bbox.h * displayScale;
+      const cutX = Math.max(12, Math.min(rect.width - cutW - 12, dispX - cutW / 2));
+      const cutY = Math.max(12, Math.min(rect.height - cutH - 12, dispY - cutH / 2));
       setCutouts((prev) => [
         ...prev,
         {
           id: `cut-${++uid}`,
           src: result.cutout,
-          x: bbox.x * displayScale,
-          y: bbox.y * displayScale,
-          w: bbox.w * displayScale,
-          h: bbox.h * displayScale,
+          x: cutX,
+          y: cutY,
+          w: cutW,
+          h: cutH,
+          ar: true,
         },
       ]);
     } catch {
@@ -267,12 +272,13 @@ function FloatingCutout({ cut, onDelete, onDownload }) {
 
   return (
     <div
-      className="cutout"
+      className={`cutout${cut.ar ? ' cutout--ar' : ''}`}
       style={{ left: pos.x, top: pos.y, width: cut.w, height: cut.h }}
       onPointerDown={startDrag}
       onPointerMove={onHoverMove}
       onPointerLeave={() => setTilt({ rx: 0, ry: 0 })}
     >
+      <div className="cutout__halo" />
       <img
         src={cut.src}
         alt="Extracted object"
@@ -281,6 +287,7 @@ function FloatingCutout({ cut, onDelete, onDownload }) {
           transform: `perspective(700px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
         }}
       />
+      {cut.ar && <div className="cutout__label">AR pick</div>}
       <div className="cutout__actions">
         <button className="cutout__btn" onClick={onDownload} title="Save PNG">⤓</button>
         <button className="cutout__btn is-danger" onClick={onDelete} title="Remove">×</button>
