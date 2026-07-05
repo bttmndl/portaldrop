@@ -321,8 +321,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   background: #000;
 }
 
-.camera video,
-.camera .camera__still {
+.camera video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -330,15 +329,35 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   object-fit: cover;
 }
 
-.camera__still.is-sending {
-  animation: suck-in 0.8s cubic-bezier(0.6, -0.1, 0.8, 0.4) forwards;
-  transform-origin: 50% 100%;
+/* crosshair showing what the hold gesture will grab */
+.camera__reticle {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  z-index: 2;
+  pointer-events: none;
+}
+.camera__reticle::before,
+.camera__reticle::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.55);
+}
+.camera__reticle::before { left: 50%; top: -10px; bottom: -10px; width: 1px; transform: translateX(-50%); }
+.camera__reticle::after { top: 50%; left: -10px; right: -10px; height: 1px; transform: translateY(-50%); }
+.camera__reticle.is-busy {
+  border-color: var(--portal-b);
+  animation: reticle-pulse 0.8s ease-in-out infinite;
 }
 
-@keyframes suck-in {
-  0%   { transform: scale(1) translateY(0); filter: brightness(1); opacity: 1; border-radius: 0; }
-  45%  { filter: brightness(1.6) saturate(1.4); }
-  100% { transform: scale(0.02) translateY(46vh) rotate(10deg); filter: brightness(3) blur(6px); opacity: 0; border-radius: 50%; }
+@keyframes reticle-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.15); opacity: 1; }
 }
 
 .camera__topbar {
@@ -378,9 +397,16 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   border: 4px solid rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(6px);
-  transition: transform 0.12s ease;
+  transition: transform 0.12s ease, border-color 0.2s ease, background 0.2s ease;
+  touch-action: none;
 }
 .shutter:active { transform: scale(0.9); }
+.shutter.is-holding {
+  transform: scale(1.12);
+  border-color: var(--portal-b);
+  background: rgba(45, 214, 255, 0.25);
+  box-shadow: 0 0 26px rgba(45, 214, 255, 0.55);
+}
 
 .camera__portal-glow {
   position: absolute;
@@ -403,14 +429,6 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   0%, 100% { transform: translateX(-50%) scale(1); }
   50%      { transform: translateX(-50%) scale(1.06); }
 }
-
-.confirm-actions {
-  display: flex;
-  gap: 14px;
-}
-
-/* ---- click-to-pick on the captured still ---- */
-.camera__still.is-picked { filter: brightness(0.4) saturate(0.7); }
 
 .camera__pick-hint {
   position: absolute;
@@ -444,6 +462,17 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
           drop-shadow(0 0 24px rgba(45, 214, 255, 0.45))
           drop-shadow(0 0 40px rgba(124, 92, 255, 0.28));
   animation: cutout-hover 2.7s ease-in-out infinite;
+}
+
+.camera__pick.is-thrown {
+  animation: throw-through 0.55s cubic-bezier(0.6, -0.1, 0.8, 0.4) forwards;
+}
+.camera__pick.is-thrown img { animation: none; }
+
+@keyframes throw-through {
+  0%   { transform: translate(-50%, -50%) scale(1); filter: brightness(1); opacity: 1; }
+  40%  { filter: brightness(1.7) saturate(1.4); }
+  100% { transform: translate(-50%, -50%) scale(0.05) translateY(-20vh); filter: brightness(3) blur(6px); opacity: 0; }
 }
 
 /* ---------------------------------------------------------------------------

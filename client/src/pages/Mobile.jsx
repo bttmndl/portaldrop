@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { socket } from '../socket.js';
 import { getSegmenter, segmentAt } from '../lib/segmenter.js';
-import { useARSupport } from '../lib/arSession.js';
-import ARViewer from '../components/ARViewer.jsx';
 
 const MAX_DIMENSION = 1280;
 const JPEG_QUALITY = 0.82;
 
-// Phases: joining -> ask-camera -> live -> confirm -> sending -> live
+// Phases: joining -> ask-camera -> live
+// Within "live", grab tracks the hold-the-shutter gesture:
+// idle -> extracting (segmenting the object under the crosshair while held)
+//      -> held (object floats, ready to aim) -> throwing (sent on release)
 export default function Mobile() {
   const { code } = useParams();
   const [phase, setPhase] = useState('joining');
@@ -17,18 +18,13 @@ export default function Mobile() {
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const stillImgRef = useRef(null);
-  const captureRef = useRef(null); // { image, width, height }
-  const [still, setStill] = useState(null);
 
-  // ---- click-to-pick the object out of the still ---------------------------
   const [aiState, setAiState] = useState('loading'); // loading | ready | error
-  const [busyPoint, setBusyPoint] = useState(null);
-  const [extracted, setExtracted] = useState(null); // { src, aspect }
-  const [arOpen, setArOpen] = useState(false);
-  const arSupported = useARSupport();
+  const [grab, setGrab] = useState('idle');
+  const [heldCutout, setHeldCutout] = useState(null); // { src, aspect }
+  const releasedRef = useRef(false); // shutter released while still extracting
 
-  // Warm the segmenter once the camera is live so it's ready by capture time.
+  // Warm the segmenter once the camera is live so it's ready by grab time.
   useEffect(() => {
     if (phase !== 'live') return;
     let alive = true;
@@ -99,91 +95,87 @@ export default function Mobile() {
     }
   }, [phase]);
 
-  // ---- capture ------------------------------------------------------------
-  const capture = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
+  const flash = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  };
 
+  const grabFrame = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return null;
     const scale = Math.min(1, MAX_DIMENSION / Math.max(video.videoWidth, video.videoHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(video.videoWidth * scale);
     canvas.height = Math.round(video.videoHeight * scale);
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const image = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    captureRef.current = { image, width: canvas.width, height: canvas.height };
-    setStill(image);
-    setPhase('confirm');
-    if (navigator.vibrate) navigator.vibrate(20);
+    return canvas;
   };
 
-  const retake = () => {
-    setStill(null);
-    setExtracted(null);
-    setPhase('live');
-  };
+  // ---- hold the shutter to grab whatever's under the crosshair -------------
+  const onHoldStart = async () => {
+    if (phase !== 'live' || grab !== 'idle') return;
+    const canvas = grabFrame();
+    if (!canvas) return;
 
-  // Tap the still to lift the object out as a transparent cutout.
-  // The still uses object-fit: cover, so the tap point has to be un-cropped
-  // back into the source image's own coordinate space before segmenting.
-  const pick = async (e) => {
-    if (phase !== 'confirm' || busyPoint || aiState !== 'ready') return;
-    const img = stillImgRef.current;
-    const rect = img.getBoundingClientRect();
-    const dispX = e.clientX - rect.left;
-    const dispY = e.clientY - rect.top;
+    releasedRef.current = false;
+    setGrab('extracting');
+    if (navigator.vibrate) navigator.vibrate(15);
 
-    const { naturalWidth: iw, naturalHeight: ih } = img;
-    const coverScale = Math.max(rect.width / iw, rect.height / ih);
-    const offsetX = (rect.width - iw * coverScale) / 2;
-    const offsetY = (rect.height - ih * coverScale) / 2;
-    const normX = (dispX - offsetX) / (iw * coverScale);
-    const normY = (dispY - offsetY) / (ih * coverScale);
-    if (normX < 0 || normX > 1 || normY < 0 || normY > 1) return;
-
-    setBusyPoint({ x: dispX, y: dispY });
-    try {
-      const result = await segmentAt(img, normX, normY);
-      if (!result) {
-        setToast('No clear object there — tap closer to its center.');
-        setTimeout(() => setToast(null), 2200);
-        return;
+    let cutout;
+    if (aiState === 'ready') {
+      try {
+        const result = await segmentAt(canvas, 0.5, 0.5);
+        cutout = result
+          ? { src: result.cutout, aspect: result.bbox.w / result.bbox.h }
+          : { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
+      } catch {
+        cutout = { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
       }
-      setExtracted({ src: result.cutout, aspect: result.bbox.w / result.bbox.h });
-      if (navigator.vibrate) navigator.vibrate(15);
-    } catch {
-      setToast('Pick failed on this device.');
-      setTimeout(() => setToast(null), 2200);
-    } finally {
-      setBusyPoint(null);
+    } else {
+      cutout = { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
+    }
+
+    if (navigator.vibrate) navigator.vibrate(15);
+    if (releasedRef.current) {
+      throwObject(cutout); // they let go before we finished grabbing — send right away
+    } else {
+      setHeldCutout(cutout);
+      setGrab('held');
     }
   };
 
-  // ---- send through the portal ---------------------------------------------
-  const send = () => {
-    setPhase('sending');
+  const onHoldEnd = () => {
+    releasedRef.current = true;
+    if (grab === 'held') throwObject(heldCutout);
+    else if (grab === 'idle') releasedRef.current = false; // nothing was pending
+  };
+
+  // ---- release: throw the held object through the portal -------------------
+  const throwObject = (cutout) => {
+    if (!cutout) {
+      setGrab('idle');
+      return;
+    }
+    setHeldCutout(cutout);
+    setGrab('throwing');
     if (navigator.vibrate) navigator.vibrate([15, 40, 60]);
 
-    // Emit mid-animation so the desktop arrival overlaps the phone suck-in.
     setTimeout(() => {
-      const c = captureRef.current;
       socket.emit('object:transfer', {
         code,
-        image: extracted ? extracted.src : c.image,
-        width: c.width,
-        height: c.height,
+        image: cutout.src,
+        width: 0,
+        height: 0,
         sentAt: Date.now(),
       });
-    }, 350);
+    }, 250);
 
-    // Animation is 800ms — return to live camera after it finishes.
     setTimeout(() => {
-      setStill(null);
-      setExtracted(null);
-      setPhase('live');
-      setToast('Sent through the portal ✦');
-      setTimeout(() => setToast(null), 2200);
-    }, 900);
+      setGrab('idle');
+      setHeldCutout(null);
+      releasedRef.current = false;
+      flash('Sent through the portal ✦');
+    }, 650);
   };
 
   // ---- render ---------------------------------------------------------------
@@ -226,78 +218,50 @@ export default function Mobile() {
     );
   }
 
-  const confirming = phase === 'confirm';
-  const sending = phase === 'sending';
+  const held = grab === 'held' || grab === 'throwing';
 
   return (
     <div className="camera">
       <video ref={videoRef} playsInline muted autoPlay />
 
-      {still && (
-        <img
-          ref={stillImgRef}
-          className={`camera__still${sending ? ' is-sending' : ''}${extracted ? ' is-picked' : ''}`}
-          src={still}
-          alt="Captured frame"
-          onClick={pick}
-        />
+      {(grab === 'idle' || grab === 'extracting') && (
+        <div className={`camera__reticle${grab === 'extracting' ? ' is-busy' : ''}`} />
       )}
 
-      {busyPoint && (
-        <div className="extract-spinner" style={{ left: busyPoint.x, top: busyPoint.y }} />
-      )}
-
-      {extracted && !sending && (
-        <div className="camera__pick">
+      {heldCutout && (
+        <div className={`camera__pick${grab === 'throwing' ? ' is-thrown' : ''}`}>
           <div className="cutout__halo" />
-          <img src={extracted.src} alt="Picked object" draggable={false} />
+          <img src={heldCutout.src} alt="Held object" draggable={false} />
         </div>
       )}
 
-      <div className={`camera__portal-glow${confirming || sending ? ' is-open' : ''}`} />
+      <div className={`camera__portal-glow${held ? ' is-open' : ''}`} />
 
       <div className="camera__topbar">
         <div className="camera__room glass">{code}</div>
       </div>
 
-      {confirming && !extracted && (
-        <div className="camera__pick-hint glass">
-          {aiState === 'ready' && 'Tap the object to lift it out'}
-          {aiState === 'loading' && 'AI warming up…'}
-          {aiState === 'error' && 'AI unavailable — you can still send the full photo'}
-        </div>
-      )}
+      <div className="camera__pick-hint glass">
+        {grab === 'idle' && aiState === 'ready' && 'Hold the shutter on an object to grab it'}
+        {grab === 'idle' && aiState === 'loading' && 'AI warming up… hold the shutter to grab anyway'}
+        {grab === 'idle' && aiState === 'error' && 'Hold the shutter to grab the whole frame'}
+        {grab === 'extracting' && 'Grabbing…'}
+        {grab === 'held' && 'Point your camera at the desktop, then let go'}
+        {grab === 'throwing' && 'Throwing it through ✦'}
+      </div>
 
       <div className="camera__controls">
-        {phase === 'live' && (
-          <button className="shutter" onClick={capture} aria-label="Capture" />
-        )}
-        {confirming && (
-          <div className="confirm-actions">
-            <button className="btn-ghost" onClick={retake}>
-              Retake
-            </button>
-            {extracted && arSupported && (
-              <button className="btn-ghost" onClick={() => setArOpen(true)}>
-                View in AR
-              </button>
-            )}
-            <button className="btn-primary" onClick={send}>
-              {extracted ? 'Send object' : 'Send through portal'}
-            </button>
-          </div>
-        )}
+        <button
+          className={`shutter${grab !== 'idle' ? ' is-holding' : ''}`}
+          onPointerDown={onHoldStart}
+          onPointerUp={onHoldEnd}
+          onPointerCancel={onHoldEnd}
+          onContextMenu={(e) => e.preventDefault()}
+          aria-label="Hold to grab, release to throw"
+        />
       </div>
 
       {toast && <div className="toast glass">{toast}</div>}
-
-      {arOpen && extracted && (
-        <ARViewer
-          imageSrc={extracted.src}
-          aspect={extracted.aspect}
-          onClose={() => setArOpen(false)}
-        />
-      )}
     </div>
   );
 }
