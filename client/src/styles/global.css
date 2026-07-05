@@ -447,11 +447,27 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
   width: min(64vw, 320px);
   z-index: 3;
-  animation: cutout-lift 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+  animation: pick-lift 0.4s cubic-bezier(0.2, 1.2, 0.3, 1) both;
   pointer-events: none;
+}
+
+/* Centering (-50%, -50%) is baked into every keyframe here — unlike the
+   generic cutout-lift animation, which would otherwise clobber it and let
+   the box drift to the right until the throw animation snapped it back. */
+@keyframes pick-lift {
+  0% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 0.2;
+    filter: blur(8px);
+  }
+  60% { opacity: 1; }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
 }
 .camera__pick img {
   position: relative;
