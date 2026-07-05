@@ -329,11 +329,12 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   object-fit: cover;
 }
 
-/* crosshair showing what the hold gesture will grab */
+/* crosshair showing what the hold gesture will grab — must match the
+   0.5, 0.5 point actually sampled by segmentAt in Mobile.jsx's onHoldStart. */
 .camera__reticle {
   position: absolute;
   left: 50%;
-  top: 42%;
+  top: 50%;
   width: 64px;
   height: 64px;
   margin: -32px 0 0 -32px;
@@ -445,7 +446,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 .camera__pick {
   position: absolute;
   left: 50%;
-  top: 42%;
+  top: 50%;
   transform: translate(-50%, -50%);
   width: min(64vw, 320px);
   z-index: 3;
