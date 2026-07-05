@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getSegmenter, segmentAt } from '../lib/segmenter.js';
 import { DEMO_OBJECTS } from '../lib/demoObjects.js';
+import { useARSupport } from '../lib/arSession.js';
+import ARViewer from '../components/ARViewer.jsx';
 
 // Picture Lab — click any object in a picture and the AI lifts it out as a
 // transparent cutout that levitates above the photo, leaving a hole behind.
@@ -16,6 +18,8 @@ export default function Lab() {
   const [busyPoint, setBusyPoint] = useState(null);  // display coords while segmenting
   const [cutouts, setCutouts] = useState([]);
   const [notice, setNotice] = useState(null);
+  const [arTarget, setArTarget] = useState(null); // { src, aspect } while viewing in AR
+  const arSupported = useARSupport();
 
   // Warm the model up front — first init downloads ~6 MB.
   useEffect(() => {
@@ -176,7 +180,7 @@ export default function Lab() {
         </div>
       </div>
 
-      {!hasPhoto ? (
+      {!hasPhoto && (
         <div className="lab__empty">
           <div className="mobile__panel glass">
             <h1>Click an object. Watch it lift out.</h1>
@@ -198,29 +202,33 @@ export default function Lab() {
             </button>
           </div>
         </div>
-      ) : (
-        <div className="lab__stage" ref={stageRef}>
-          <canvas
-            ref={canvasRef}
-            className={`lab__photo${busyPoint ? ' is-busy' : ''}`}
-            onClick={onCanvasClick}
-          />
-          {busyPoint && (
-            <div
-              className="extract-spinner"
-              style={{ left: busyPoint.x, top: busyPoint.y }}
-            />
-          )}
-          {cutouts.map((cut) => (
-            <FloatingCutout
-              key={cut.id}
-              cut={cut}
-              onDelete={() => removeCutout(cut.id)}
-              onDownload={() => download(cut)}
-            />
-          ))}
-        </div>
       )}
+
+      {/* Always mounted (even before a photo loads) so canvasRef is ready
+          the moment drawToCanvas needs it — see drawToCanvas above. */}
+      <div className="lab__stage" ref={stageRef} style={{ display: hasPhoto ? undefined : 'none' }}>
+        <canvas
+          ref={canvasRef}
+          className={`lab__photo${busyPoint ? ' is-busy' : ''}`}
+          onClick={onCanvasClick}
+        />
+        {busyPoint && (
+          <div
+            className="extract-spinner"
+            style={{ left: busyPoint.x, top: busyPoint.y }}
+          />
+        )}
+        {cutouts.map((cut) => (
+          <FloatingCutout
+            key={cut.id}
+            cut={cut}
+            arSupported={arSupported}
+            onDelete={() => removeCutout(cut.id)}
+            onDownload={() => download(cut)}
+            onViewAR={() => setArTarget({ src: cut.src, aspect: cut.w / cut.h })}
+          />
+        ))}
+      </div>
 
       {hasPhoto && (
         <div className="lab__toolbar">
@@ -237,13 +245,21 @@ export default function Lab() {
       )}
 
       {notice && <div className="toast glass">{notice}</div>}
+
+      {arTarget && (
+        <ARViewer
+          imageSrc={arTarget.src}
+          aspect={arTarget.aspect}
+          onClose={() => setArTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
 // A cutout hovering above the photo: levitates, tilts in 3D toward the
 // cursor, draggable, with save/delete controls.
-function FloatingCutout({ cut, onDelete, onDownload }) {
+function FloatingCutout({ cut, arSupported, onDelete, onDownload, onViewAR }) {
   const [pos, setPos] = useState({ x: cut.x, y: cut.y - 26 }); // lift on birth
   const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
 
@@ -289,6 +305,9 @@ function FloatingCutout({ cut, onDelete, onDownload }) {
       />
       {cut.ar && <div className="cutout__label">AR pick</div>}
       <div className="cutout__actions">
+        {arSupported && (
+          <button className="cutout__btn" onClick={onViewAR} title="View in AR">📱</button>
+        )}
         <button className="cutout__btn" onClick={onDownload} title="Save PNG">⤓</button>
         <button className="cutout__btn is-danger" onClick={onDelete} title="Remove">×</button>
       </div>

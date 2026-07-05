@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { socket } from '../socket.js';
+import { getSegmenter, segmentAt } from '../lib/segmenter.js';
+import { useARSupport } from '../lib/arSession.js';
+import ARViewer from '../components/ARViewer.jsx';
 
 const MAX_DIMENSION = 1280;
 const JPEG_QUALITY = 0.82;
@@ -14,8 +17,26 @@ export default function Mobile() {
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const stillImgRef = useRef(null);
   const captureRef = useRef(null); // { image, width, height }
   const [still, setStill] = useState(null);
+
+  // ---- click-to-pick the object out of the still ---------------------------
+  const [aiState, setAiState] = useState('loading'); // loading | ready | error
+  const [busyPoint, setBusyPoint] = useState(null);
+  const [extracted, setExtracted] = useState(null); // { src, aspect }
+  const [arOpen, setArOpen] = useState(false);
+  const arSupported = useARSupport();
+
+  // Warm the segmenter once the camera is live so it's ready by capture time.
+  useEffect(() => {
+    if (phase !== 'live') return;
+    let alive = true;
+    getSegmenter()
+      .then(() => alive && setAiState('ready'))
+      .catch(() => alive && setAiState('error'));
+    return () => { alive = false; };
+  }, [phase]);
 
   // ---- join room ----------------------------------------------------------
   useEffect(() => {
@@ -98,7 +119,44 @@ export default function Mobile() {
 
   const retake = () => {
     setStill(null);
+    setExtracted(null);
     setPhase('live');
+  };
+
+  // Tap the still to lift the object out as a transparent cutout.
+  // The still uses object-fit: cover, so the tap point has to be un-cropped
+  // back into the source image's own coordinate space before segmenting.
+  const pick = async (e) => {
+    if (phase !== 'confirm' || busyPoint || aiState !== 'ready') return;
+    const img = stillImgRef.current;
+    const rect = img.getBoundingClientRect();
+    const dispX = e.clientX - rect.left;
+    const dispY = e.clientY - rect.top;
+
+    const { naturalWidth: iw, naturalHeight: ih } = img;
+    const coverScale = Math.max(rect.width / iw, rect.height / ih);
+    const offsetX = (rect.width - iw * coverScale) / 2;
+    const offsetY = (rect.height - ih * coverScale) / 2;
+    const normX = (dispX - offsetX) / (iw * coverScale);
+    const normY = (dispY - offsetY) / (ih * coverScale);
+    if (normX < 0 || normX > 1 || normY < 0 || normY > 1) return;
+
+    setBusyPoint({ x: dispX, y: dispY });
+    try {
+      const result = await segmentAt(img, normX, normY);
+      if (!result) {
+        setToast('No clear object there — tap closer to its center.');
+        setTimeout(() => setToast(null), 2200);
+        return;
+      }
+      setExtracted({ src: result.cutout, aspect: result.bbox.w / result.bbox.h });
+      if (navigator.vibrate) navigator.vibrate(15);
+    } catch {
+      setToast('Pick failed on this device.');
+      setTimeout(() => setToast(null), 2200);
+    } finally {
+      setBusyPoint(null);
+    }
   };
 
   // ---- send through the portal ---------------------------------------------
@@ -111,7 +169,7 @@ export default function Mobile() {
       const c = captureRef.current;
       socket.emit('object:transfer', {
         code,
-        image: c.image,
+        image: extracted ? extracted.src : c.image,
         width: c.width,
         height: c.height,
         sentAt: Date.now(),
@@ -121,6 +179,7 @@ export default function Mobile() {
     // Animation is 800ms — return to live camera after it finishes.
     setTimeout(() => {
       setStill(null);
+      setExtracted(null);
       setPhase('live');
       setToast('Sent through the portal ✦');
       setTimeout(() => setToast(null), 2200);
@@ -176,10 +235,23 @@ export default function Mobile() {
 
       {still && (
         <img
-          className={`camera__still${sending ? ' is-sending' : ''}`}
+          ref={stillImgRef}
+          className={`camera__still${sending ? ' is-sending' : ''}${extracted ? ' is-picked' : ''}`}
           src={still}
           alt="Captured frame"
+          onClick={pick}
         />
+      )}
+
+      {busyPoint && (
+        <div className="extract-spinner" style={{ left: busyPoint.x, top: busyPoint.y }} />
+      )}
+
+      {extracted && !sending && (
+        <div className="camera__pick">
+          <div className="cutout__halo" />
+          <img src={extracted.src} alt="Picked object" draggable={false} />
+        </div>
       )}
 
       <div className={`camera__portal-glow${confirming || sending ? ' is-open' : ''}`} />
@@ -187,6 +259,14 @@ export default function Mobile() {
       <div className="camera__topbar">
         <div className="camera__room glass">{code}</div>
       </div>
+
+      {confirming && !extracted && (
+        <div className="camera__pick-hint glass">
+          {aiState === 'ready' && 'Tap the object to lift it out'}
+          {aiState === 'loading' && 'AI warming up…'}
+          {aiState === 'error' && 'AI unavailable — you can still send the full photo'}
+        </div>
+      )}
 
       <div className="camera__controls">
         {phase === 'live' && (
@@ -197,14 +277,27 @@ export default function Mobile() {
             <button className="btn-ghost" onClick={retake}>
               Retake
             </button>
+            {extracted && arSupported && (
+              <button className="btn-ghost" onClick={() => setArOpen(true)}>
+                View in AR
+              </button>
+            )}
             <button className="btn-primary" onClick={send}>
-              Send through portal
+              {extracted ? 'Send object' : 'Send through portal'}
             </button>
           </div>
         )}
       </div>
 
       {toast && <div className="toast glass">{toast}</div>}
+
+      {arOpen && extracted && (
+        <ARViewer
+          imageSrc={extracted.src}
+          aspect={extracted.aspect}
+          onClose={() => setArOpen(false)}
+        />
+      )}
     </div>
   );
 }

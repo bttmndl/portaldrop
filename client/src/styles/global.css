@@ -208,6 +208,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   border-radius: 12px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--glass-edge);
   pointer-events: none;
+  transition: transform 0.12s ease-out;
 }
 
 .stage-object.is-arriving {
@@ -227,23 +228,30 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   }
 }
 
-.stage-object__delete {
+.stage-object__actions {
   position: absolute;
   top: -10px;
   right: -10px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--danger);
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  gap: 6px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-.stage-object:hover .stage-object__delete { opacity: 1; }
+.stage-object:hover .stage-object__actions { opacity: 1; }
+
+.stage-object__btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-raise);
+  border: 1px solid var(--glass-edge);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.stage-object__btn.is-danger { background: var(--danger); border: none; }
 
 .desktop__hint {
   position: absolute;
@@ -399,6 +407,106 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 .confirm-actions {
   display: flex;
   gap: 14px;
+}
+
+/* ---- click-to-pick on the captured still ---- */
+.camera__still.is-picked { filter: brightness(0.4) saturate(0.7); }
+
+.camera__pick-hint {
+  position: absolute;
+  top: calc(60px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  z-index: 3;
+  white-space: nowrap;
+}
+
+.camera__pick {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(64vw, 320px);
+  z-index: 3;
+  animation: cutout-lift 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+  pointer-events: none;
+}
+.camera__pick img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.7))
+          drop-shadow(0 0 24px rgba(45, 214, 255, 0.45))
+          drop-shadow(0 0 40px rgba(124, 92, 255, 0.28));
+  animation: cutout-hover 2.7s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   AR viewer (WebXR immersive-ar overlay)
+--------------------------------------------------------------------------- */
+.ar-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+}
+
+.ar-viewer__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ar-viewer__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ar-viewer__topbar {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  pointer-events: auto;
+}
+
+.ar-viewer__close {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(5, 6, 14, 0.55);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(10px);
+}
+
+.ar-viewer__hint,
+.ar-viewer__error {
+  position: absolute;
+  bottom: calc(36px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: center;
+  max-width: 80vw;
+  z-index: 2;
+}
+
+.ar-viewer__error {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  pointer-events: auto;
 }
 
 .toast {

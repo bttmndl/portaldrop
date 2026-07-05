@@ -1,10 +1,16 @@
 import { useRef, useState } from 'react';
+import { useARSupport } from '../lib/arSession.js';
+import ARViewer from './ARViewer.jsx';
 
 // A captured object living on the desktop canvas.
 // Arrives from the portal center, then becomes draggable via pointer events.
 export default function StageObject({ object, portalCenter, onMove, onDelete }) {
   const [arriving, setArriving] = useState(true);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+  const [arOpen, setArOpen] = useState(false);
+  const [aspect, setAspect] = useState(1);
   const dragRef = useRef(null);
+  const arSupported = useARSupport();
 
   const startDrag = (e) => {
     if (arriving) return;
@@ -27,6 +33,14 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
     window.addEventListener('pointerup', onPointerUp);
   };
 
+  const onHoverMove = (e) => {
+    if (arriving) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - 0.5;
+    const py = (e.clientY - r.top) / r.height - 0.5;
+    setTilt({ rx: -py * 18, ry: px * 18 });
+  };
+
   return (
     <div
       ref={dragRef}
@@ -41,16 +55,41 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
         cursor: arriving ? 'default' : 'grab',
       }}
       onPointerDown={startDrag}
+      onPointerMove={onHoverMove}
+      onPointerLeave={() => setTilt({ rx: 0, ry: 0 })}
       onAnimationEnd={() => setArriving(false)}
     >
-      <img src={object.image} alt="Captured object" draggable={false} />
-      <button
-        className="stage-object__delete"
-        onClick={() => onDelete(object.id)}
-        aria-label="Delete object"
-      >
-        ×
-      </button>
+      <img
+        src={object.image}
+        alt="Captured object"
+        draggable={false}
+        onLoad={(e) => setAspect(e.target.naturalWidth / e.target.naturalHeight || 1)}
+        style={{ transform: `perspective(900px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` }}
+      />
+      <div className="stage-object__actions">
+        {arSupported && (
+          <button
+            className="stage-object__btn"
+            onClick={() => setArOpen(true)}
+            aria-label="View in AR"
+            title="View in AR"
+          >
+            📱
+          </button>
+        )}
+        <button
+          className="stage-object__btn is-danger"
+          onClick={() => onDelete(object.id)}
+          aria-label="Delete object"
+          title="Delete"
+        >
+          ×
+        </button>
+      </div>
+
+      {arOpen && (
+        <ARViewer imageSrc={object.image} aspect={aspect} onClose={() => setArOpen(false)} />
+      )}
     </div>
   );
 }
