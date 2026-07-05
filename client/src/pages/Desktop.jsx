@@ -136,6 +136,10 @@ export default function Desktop() {
           Drag objects to move them · hover for delete
         </div>
       )}
+
+      <a className="desktop__lab-link glass" href="/lab">
+        🧪 Picture Lab — click objects out of any photo
+      </a>
     </div>
   );
 }

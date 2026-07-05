@@ -27,14 +27,12 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: { origin: CLIENT_ORIGIN, methods: ['GET', 'POST'] },
-  maxHttpBufferSize: 12 * 1024 * 1024, // captured JPEGs travel as data URLs
+  maxHttpBufferSize: 12 * 1024 * 1024,
 });
 
 io.on('connection', (socket) => {
-  // ---- Desktop creates a room -------------------------------------------
   socket.on('room:create', (ack) => {
     if (typeof ack !== 'function') return;
-    // One room per desktop socket — recreate replaces the old one.
     const existing = findRoomByDesktop(socket.id);
     if (existing) deleteRoom(existing.code);
 
@@ -43,7 +41,6 @@ io.on('connection', (socket) => {
     ack({ ok: true, code: room.code });
   });
 
-  // ---- Phone joins via QR link ------------------------------------------
   socket.on('room:join', (payload, ack) => {
     if (typeof ack !== 'function') return;
     const room = getRoom(payload?.code);
@@ -59,7 +56,6 @@ io.on('connection', (socket) => {
     ack({ ok: true, code: room.code });
   });
 
-  // ---- Phone throws an object through the portal -------------------------
   socket.on('object:transfer', (payload) => {
     const room = getRoom(payload?.code);
     if (!room || !room.phones.has(socket.id)) return;
@@ -74,7 +70,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ---- Disconnect handling ------------------------------------------------
   socket.on('disconnect', () => {
     const desktopRoom = findRoomByDesktop(socket.id);
     if (desktopRoom) {

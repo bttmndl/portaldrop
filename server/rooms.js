@@ -1,10 +1,10 @@
 // In-memory room store. Phase 1 keeps this simple — Redis comes later
 // when we need multi-instance scaling.
 
-const ROOM_TTL_MS = 30 * 60 * 1000; // rooms expire after 30 minutes
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I ambiguity
+const ROOM_TTL_MS = 30 * 60 * 1000;
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-const rooms = new Map(); // code -> { code, desktopId, phones:Set, createdAt }
+const rooms = new Map();
 
 function generateCode() {
   let code;

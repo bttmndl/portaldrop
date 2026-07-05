@@ -424,3 +424,152 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Picture Lab
+--------------------------------------------------------------------------- */
+.lab {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  overflow: hidden;
+}
+
+.lab__topbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 32px 8px;
+}
+
+.lab__back {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+.lab__back:hover { color: var(--ink); }
+
+.lab__title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 17px;
+}
+
+.lab__ai {
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.lab__ai.ai-ready { color: var(--portal-b); }
+.lab__ai.ai-error { color: var(--danger); }
+
+.lab__empty {
+  display: grid;
+  place-items: center;
+}
+
+.lab__file { display: inline-block; text-align: center; }
+
+.lab__stage {
+  position: relative;
+  align-self: center;
+  max-width: min(94vw, 1500px);
+}
+
+.lab__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 76vh;
+  object-fit: contain;
+  border-radius: 18px;
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
+}
+.lab__photo.is-busy { cursor: progress; }
+
+.extract-spinner {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--portal-b);
+  border-right-color: var(--portal-a);
+  animation: spinner 0.7s linear infinite;
+  pointer-events: none;
+  z-index: 4;
+}
+@keyframes spinner { to { transform: rotate(360deg); } }
+
+.lab__toolbar { padding: 14px 0 22px; }
+
+/* ---- floating extracted cutouts ---- */
+.cutout {
+  position: absolute;
+  z-index: 3;
+  cursor: grab;
+  animation: cutout-lift 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+}
+.cutout:active { cursor: grabbing; }
+
+.cutout img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: transform 0.12s ease-out;
+  filter: drop-shadow(0 26px 34px rgba(0, 0, 0, 0.6))
+          drop-shadow(0 0 18px rgba(124, 92, 255, 0.45));
+  animation: cutout-hover 3.4s ease-in-out infinite;
+}
+
+@keyframes cutout-lift {
+  0% { transform: translateY(26px) scale(0.98); opacity: 0.4; }
+  60% { opacity: 1; }
+  100% { transform: translateY(0) scale(1.04); }
+}
+
+@keyframes cutout-hover {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -7px; }
+}
+
+.cutout__actions {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.cutout:hover .cutout__actions { opacity: 1; }
+
+.cutout__btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg-raise);
+  border: 1px solid var(--glass-edge);
+}
+.cutout__btn.is-danger { background: var(--danger); border: none; }
+
+/* link to the lab from the main page */
+.desktop__lab-link {
+  position: absolute;
+  bottom: 26px;
+  left: 32px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.desktop__lab-link:hover { color: var(--ink); }
