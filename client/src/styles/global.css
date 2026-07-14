@@ -567,6 +567,78 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 }
 
 /* ---------------------------------------------------------------------------
+   3D reconstruction viewer (click an object -> inflated relief mesh,
+   studio-lit, orbit-able)
+--------------------------------------------------------------------------- */
+.reconstruct3d {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: radial-gradient(1200px 800px at 50% 30%, rgba(124, 92, 255, 0.12), transparent 60%), #05060e;
+}
+
+.reconstruct3d__canvas {
+  position: absolute;
+  inset: 0;
+}
+.reconstruct3d__canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.reconstruct3d__topbar {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 2;
+}
+
+.reconstruct3d__hand-btn {
+  padding: 10px 18px;
+  font-size: 13px;
+}
+
+.reconstruct3d__hint {
+  position: absolute;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--muted);
+  z-index: 2;
+}
+
+/* ---------------------------------------------------------------------------
+   AR-on-hand viewer (live camera + hand-tracked 3D relief object, no WebXR)
+--------------------------------------------------------------------------- */
+.ar-hand {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: #000;
+  display: grid;
+  place-items: center;
+}
+
+.ar-hand__stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.ar-hand__video,
+.ar-hand__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ar-hand__video { object-fit: cover; }
+
+/* ---------------------------------------------------------------------------
    Accessibility
 --------------------------------------------------------------------------- */
 :focus-visible { outline: 2px solid var(--portal-b); outline-offset: 3px; }

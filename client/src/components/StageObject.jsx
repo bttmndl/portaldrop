@@ -1,13 +1,21 @@
 import { useRef, useState } from 'react';
 import { useARSupport } from '../lib/arSession.js';
 import ARViewer from './ARViewer.jsx';
+import Reconstruct3D from './Reconstruct3D.jsx';
+import ARHandViewer from './ARHandViewer.jsx';
+
+const CLICK_MOVE_THRESHOLD = 5; // px — below this, a pointerdown+up counts as a click, not a drag
+const handAvailable = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
 // A captured object living on the desktop canvas.
 // Arrives from the portal center, then becomes draggable via pointer events.
+// Clicking it (without dragging) opens the ultra-realistic 3D reconstruction.
 export default function StageObject({ object, portalCenter, onMove, onDelete }) {
   const [arriving, setArriving] = useState(true);
   const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
   const [arOpen, setArOpen] = useState(false);
+  const [reconOpen, setReconOpen] = useState(false);
+  const [handAROpen, setHandAROpen] = useState(false);
   const [aspect, setAspect] = useState(1);
   const dragRef = useRef(null);
   const arSupported = useARSupport();
@@ -18,8 +26,10 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
     const startX = e.clientX;
     const startY = e.clientY;
     const origin = { x: object.x, y: object.y };
+    let moved = false;
 
     const onPointerMove = (ev) => {
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > CLICK_MOVE_THRESHOLD) moved = true;
       onMove(object.id, {
         x: origin.x + (ev.clientX - startX),
         y: origin.y + (ev.clientY - startY),
@@ -28,6 +38,7 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
     const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      if (!moved) setReconOpen(true);
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
@@ -77,6 +88,16 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
             📱
           </button>
         )}
+        {handAvailable && (
+          <button
+            className="stage-object__btn"
+            onClick={() => setHandAROpen(true)}
+            aria-label="View on my hand"
+            title="View on my hand"
+          >
+            🖐️
+          </button>
+        )}
         <button
           className="stage-object__btn is-danger"
           onClick={() => onDelete(object.id)}
@@ -89,6 +110,16 @@ export default function StageObject({ object, portalCenter, onMove, onDelete }) 
 
       {arOpen && (
         <ARViewer imageSrc={object.image} aspect={aspect} onClose={() => setArOpen(false)} />
+      )}
+      {reconOpen && (
+        <Reconstruct3D
+          imageSrc={object.image}
+          onClose={() => setReconOpen(false)}
+          onViewOnHand={handAvailable ? () => { setReconOpen(false); setHandAROpen(true); } : undefined}
+        />
+      )}
+      {handAROpen && (
+        <ARHandViewer imageSrc={object.image} onClose={() => setHandAROpen(false)} />
       )}
     </div>
   );

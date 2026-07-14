@@ -4,6 +4,11 @@ import { getSegmenter, segmentAt } from '../lib/segmenter.js';
 import { DEMO_OBJECTS } from '../lib/demoObjects.js';
 import { useARSupport } from '../lib/arSession.js';
 import ARViewer from '../components/ARViewer.jsx';
+import Reconstruct3D from '../components/Reconstruct3D.jsx';
+import ARHandViewer from '../components/ARHandViewer.jsx';
+
+const CLICK_MOVE_THRESHOLD = 5;
+const handAvailable = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
 // Picture Lab — click any object in a picture and the AI lifts it out as a
 // transparent cutout that levitates above the photo, leaving a hole behind.
@@ -19,6 +24,8 @@ export default function Lab() {
   const [cutouts, setCutouts] = useState([]);
   const [notice, setNotice] = useState(null);
   const [arTarget, setArTarget] = useState(null); // { src, aspect } while viewing in AR
+  const [reconTarget, setReconTarget] = useState(null); // { src } while reconstructing in 3D
+  const [handTarget, setHandTarget] = useState(null); // { src } while viewing on hand
   const arSupported = useARSupport();
 
   // Warm the model up front — first init downloads ~6 MB.
@@ -226,6 +233,8 @@ export default function Lab() {
             onDelete={() => removeCutout(cut.id)}
             onDownload={() => download(cut)}
             onViewAR={() => setArTarget({ src: cut.src, aspect: cut.w / cut.h })}
+            onReconstruct={() => setReconTarget({ src: cut.src })}
+            onViewOnHand={handAvailable ? () => setHandTarget({ src: cut.src }) : undefined}
           />
         ))}
       </div>
@@ -253,13 +262,24 @@ export default function Lab() {
           onClose={() => setArTarget(null)}
         />
       )}
+      {reconTarget && (
+        <Reconstruct3D
+          imageSrc={reconTarget.src}
+          onClose={() => setReconTarget(null)}
+          onViewOnHand={handAvailable ? () => { setHandTarget(reconTarget); setReconTarget(null); } : undefined}
+        />
+      )}
+      {handTarget && (
+        <ARHandViewer imageSrc={handTarget.src} onClose={() => setHandTarget(null)} />
+      )}
     </div>
   );
 }
 
 // A cutout hovering above the photo: levitates, tilts in 3D toward the
-// cursor, draggable, with save/delete controls.
-function FloatingCutout({ cut, arSupported, onDelete, onDownload, onViewAR }) {
+// cursor, draggable, with save/delete controls. Clicking it (without
+// dragging) opens the ultra-realistic 3D reconstruction.
+function FloatingCutout({ cut, arSupported, onDelete, onDownload, onViewAR, onReconstruct, onViewOnHand }) {
   const [pos, setPos] = useState({ x: cut.x, y: cut.y - 26 }); // lift on birth
   const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
 
@@ -269,11 +289,15 @@ function FloatingCutout({ cut, arSupported, onDelete, onDownload, onViewAR }) {
     const sx = e.clientX;
     const sy = e.clientY;
     const origin = { ...pos };
-    const move = (ev) =>
+    let moved = false;
+    const move = (ev) => {
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > CLICK_MOVE_THRESHOLD) moved = true;
       setPos({ x: origin.x + ev.clientX - sx, y: origin.y + ev.clientY - sy });
+    };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      if (!moved) onReconstruct?.();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -307,6 +331,9 @@ function FloatingCutout({ cut, arSupported, onDelete, onDownload, onViewAR }) {
       <div className="cutout__actions">
         {arSupported && (
           <button className="cutout__btn" onClick={onViewAR} title="View in AR">📱</button>
+        )}
+        {onViewOnHand && (
+          <button className="cutout__btn" onClick={onViewOnHand} title="View on my hand">🖐️</button>
         )}
         <button className="cutout__btn" onClick={onDownload} title="Save PNG">⤓</button>
         <button className="cutout__btn is-danger" onClick={onDelete} title="Remove">×</button>
