@@ -11,9 +11,10 @@ const JPEG_QUALITY = 0.82;
 // Within "live", grab tracks the hold-the-shutter gesture:
 // idle -> extracting (segmenting the object under the crosshair while held)
 //      -> held (object floats, ready to aim) -> throwing (sent on release)
-// From "held" there are two separate exits: release the shutter to throw
-// it through the portal (unchanged), or tap "Try it on your hand" to view
-// it in AR right here on the phone — no portal, no desktop involved.
+// The shutter always throws through the portal to the desktop — unchanged.
+// "View on my hand" is a completely separate control: a single tap on its
+// own button, independent of the shutter/held/portal state machine. It
+// never touches the socket or the desktop, it just opens AR right here.
 export default function Mobile() {
   const { code } = useParams();
   const [phase, setPhase] = useState('joining');
@@ -27,6 +28,7 @@ export default function Mobile() {
   const [grab, setGrab] = useState('idle');
   const [heldCutout, setHeldCutout] = useState(null); // { src, aspect }
   const [handAR, setHandAR] = useState(null); // { src } while viewing on-hand AR
+  const [handGrabbing, setHandGrabbing] = useState(false);
   const releasedRef = useRef(false); // shutter released while still extracting
 
   // Warm the segmenter once the camera is live so it's ready by grab time.
@@ -123,29 +125,33 @@ export default function Mobile() {
     return canvas;
   };
 
+  // Segment whatever's under the crosshair right now. Shared by both the
+  // shutter (-> portal) and the standalone hand button (-> local AR).
+  const captureCutout = async () => {
+    const canvas = grabFrame();
+    if (!canvas) return null;
+    if (aiState === 'ready') {
+      try {
+        const result = await segmentAt(canvas, 0.5, 0.5);
+        return result
+          ? { src: result.cutout, aspect: result.bbox.w / result.bbox.h }
+          : { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
+      } catch {
+        return { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
+      }
+    }
+    return { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
+  };
+
   // ---- hold the shutter to grab whatever's under the crosshair -------------
   const onHoldStart = async () => {
     if (phase !== 'live' || grab !== 'idle') return;
-    const canvas = grabFrame();
-    if (!canvas) return;
-
     releasedRef.current = false;
     setGrab('extracting');
     if (navigator.vibrate) navigator.vibrate(15);
 
-    let cutout;
-    if (aiState === 'ready') {
-      try {
-        const result = await segmentAt(canvas, 0.5, 0.5);
-        cutout = result
-          ? { src: result.cutout, aspect: result.bbox.w / result.bbox.h }
-          : { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
-      } catch {
-        cutout = { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
-      }
-    } else {
-      cutout = { src: canvas.toDataURL('image/jpeg', JPEG_QUALITY), aspect: canvas.width / canvas.height };
-    }
+    const cutout = await captureCutout();
+    if (!cutout) { setGrab('idle'); return; }
 
     if (navigator.vibrate) navigator.vibrate(15);
     if (releasedRef.current) {
@@ -190,15 +196,19 @@ export default function Mobile() {
     }, 650);
   };
 
-  // ---- separate exit: view the held object on your own hand, right here ----
-  // No socket emit, no desktop, no portal — just this phone's camera.
-  const viewOnHand = () => {
-    if (!heldCutout) return;
+  // ---- standalone: capture + view on your own hand, right here -------------
+  // Entirely separate from the shutter/portal flow above — no socket emit,
+  // no desktop involved at all.
+  const grabForHand = async () => {
+    if (phase !== 'live' || grab !== 'idle' || handGrabbing) return;
+    setHandGrabbing(true);
+    if (navigator.vibrate) navigator.vibrate(15);
+    const cutout = await captureCutout();
+    setHandGrabbing(false);
+    if (!cutout) return;
+    if (navigator.vibrate) navigator.vibrate(15);
     stopCamera(); // free the physical camera before ARHandViewer opens its own stream
-    setHandAR(heldCutout);
-    setGrab('idle');
-    setHeldCutout(null);
-    releasedRef.current = false;
+    setHandAR(cutout);
   };
 
   const closeHandAR = () => {
@@ -270,20 +280,25 @@ export default function Mobile() {
       </div>
 
       <div className="camera__pick-hint glass">
-        {grab === 'idle' && aiState === 'ready' && 'Hold the shutter on an object to grab it'}
-        {grab === 'idle' && aiState === 'loading' && 'AI warming up… hold the shutter to grab anyway'}
-        {grab === 'idle' && aiState === 'error' && 'Hold the shutter to grab the whole frame'}
+        {grab === 'idle' && !handGrabbing && aiState === 'ready' && 'Hold the shutter to throw through the portal, or tap 🖐️ to try it on your hand'}
+        {grab === 'idle' && !handGrabbing && aiState === 'loading' && 'AI warming up… you can still grab'}
+        {grab === 'idle' && !handGrabbing && aiState === 'error' && 'Hold the shutter to grab the whole frame'}
+        {handGrabbing && 'Grabbing for your hand…'}
         {grab === 'extracting' && 'Grabbing…'}
-        {grab === 'held' && 'Let go to throw it through the portal — or try it on your hand'}
+        {grab === 'held' && 'Point your camera at the desktop, then let go'}
         {grab === 'throwing' && 'Throwing it through ✦'}
       </div>
 
       <div className="camera__controls">
-        {grab === 'held' && (
-          <button className="btn-ghost camera__hand-btn" onClick={viewOnHand}>
-            🖐️ Try it on your hand
-          </button>
-        )}
+        <button
+          className={`camera__hand-btn${handGrabbing ? ' is-busy' : ''}`}
+          onClick={grabForHand}
+          disabled={grab !== 'idle' || handGrabbing}
+          aria-label="Capture and view on your hand"
+          title="View on your hand"
+        >
+          🖐️
+        </button>
         <button
           className={`shutter${grab !== 'idle' ? ' is-holding' : ''}`}
           onPointerDown={onHoldStart}
