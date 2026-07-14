@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { buildRelief, reliefMaterial } from '../lib/relief.js';
@@ -201,7 +202,11 @@ export default function ARHandViewer({ imageSrc, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageSrc]);
 
-  return (
+  // Portaled to <body> for the same reason as Reconstruct3D: the object
+  // card this is opened from carries a CSS transform, which would otherwise
+  // trap this `position: fixed` overlay inside that small card's box
+  // instead of covering the actual viewport.
+  return createPortal(
     <div className="ar-hand">
       <div className="ar-hand__stage" ref={stageRef}>
         <video ref={videoRef} className="ar-hand__video" playsInline muted autoPlay />
@@ -229,6 +234,7 @@ export default function ARHandViewer({ imageSrc, onClose }) {
           <button className="btn-ghost" onClick={onClose}>Close</button>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

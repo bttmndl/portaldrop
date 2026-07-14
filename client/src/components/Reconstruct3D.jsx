@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -125,7 +126,12 @@ export default function Reconstruct3D({ imageSrc, onClose, onViewOnHand }) {
     };
   }, [imageSrc]);
 
-  return (
+  // Portaled straight to <body>: this is meant to cover the real viewport,
+  // but the object cards it's opened from apply a CSS `transform` (drag
+  // position, arrival/lift animations) which makes them a new containing
+  // block for any `position: fixed` descendant — without the portal this
+  // fullscreen overlay would get trapped inside that small card instead.
+  return createPortal(
     <div className="reconstruct3d">
       <div ref={mountRef} className="reconstruct3d__canvas" />
 
@@ -152,6 +158,7 @@ export default function Reconstruct3D({ imageSrc, onClose, onViewOnHand }) {
           <button className="btn-ghost" onClick={onClose}>Close</button>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

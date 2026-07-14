@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { startARPlacement } from '../lib/arSession.js';
 
 // Full-screen WebXR AR overlay: taps a real-world surface through the
@@ -47,7 +48,12 @@ export default function ARViewer({ imageSrc, aspect, onClose }) {
     else onClose();
   };
 
-  return (
+  // Portaled to <body>: the object card this opens from carries a CSS
+  // transform (drag position, arrival animation), which makes it a new
+  // containing block for `position: fixed` descendants — without this,
+  // the overlay (and WebXR's dom-overlay root) would be trapped inside
+  // that small card instead of covering the real viewport.
+  return createPortal(
     <div className="ar-viewer">
       <canvas ref={canvasRef} className="ar-viewer__canvas" />
       {/* dom-overlay root — 2D UI composited on top of the passthrough camera;
@@ -72,6 +78,7 @@ export default function ARViewer({ imageSrc, aspect, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
