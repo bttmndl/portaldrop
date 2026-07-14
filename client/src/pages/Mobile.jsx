@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { socket } from '../socket.js';
 import { getSegmenter, segmentAt } from '../lib/segmenter.js';
+import ARHandViewer from '../components/ARHandViewer.jsx';
 
 const MAX_DIMENSION = 1280;
 const JPEG_QUALITY = 0.82;
@@ -10,6 +11,9 @@ const JPEG_QUALITY = 0.82;
 // Within "live", grab tracks the hold-the-shutter gesture:
 // idle -> extracting (segmenting the object under the crosshair while held)
 //      -> held (object floats, ready to aim) -> throwing (sent on release)
+// From "held" there are two separate exits: release the shutter to throw
+// it through the portal (unchanged), or tap "Try it on your hand" to view
+// it in AR right here on the phone — no portal, no desktop involved.
 export default function Mobile() {
   const { code } = useParams();
   const [phase, setPhase] = useState('joining');
@@ -22,6 +26,7 @@ export default function Mobile() {
   const [aiState, setAiState] = useState('loading'); // loading | ready | error
   const [grab, setGrab] = useState('idle');
   const [heldCutout, setHeldCutout] = useState(null); // { src, aspect }
+  const [handAR, setHandAR] = useState(null); // { src } while viewing on-hand AR
   const releasedRef = useRef(false); // shutter released while still extracting
 
   // Warm the segmenter once the camera is live so it's ready by grab time.
@@ -81,6 +86,13 @@ export default function Mobile() {
         audio: false,
       });
       streamRef.current = stream;
+      // Re-calling this while already in the 'live' phase (e.g. resuming
+      // after hand AR closes) won't retrigger the attach effect below —
+      // React bails out on an identical setPhase('live') — so attach here too.
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
       setPhase('live');
     } catch {
       setError('Camera access is required. Allow camera permission and reload.');
@@ -178,6 +190,22 @@ export default function Mobile() {
     }, 650);
   };
 
+  // ---- separate exit: view the held object on your own hand, right here ----
+  // No socket emit, no desktop, no portal — just this phone's camera.
+  const viewOnHand = () => {
+    if (!heldCutout) return;
+    stopCamera(); // free the physical camera before ARHandViewer opens its own stream
+    setHandAR(heldCutout);
+    setGrab('idle');
+    setHeldCutout(null);
+    releasedRef.current = false;
+  };
+
+  const closeHandAR = () => {
+    setHandAR(null);
+    startCamera(); // resume the live preview
+  };
+
   // ---- render ---------------------------------------------------------------
   if (error) {
     return (
@@ -246,11 +274,16 @@ export default function Mobile() {
         {grab === 'idle' && aiState === 'loading' && 'AI warming up… hold the shutter to grab anyway'}
         {grab === 'idle' && aiState === 'error' && 'Hold the shutter to grab the whole frame'}
         {grab === 'extracting' && 'Grabbing…'}
-        {grab === 'held' && 'Point your camera at the desktop, then let go'}
+        {grab === 'held' && 'Let go to throw it through the portal — or try it on your hand'}
         {grab === 'throwing' && 'Throwing it through ✦'}
       </div>
 
       <div className="camera__controls">
+        {grab === 'held' && (
+          <button className="btn-ghost camera__hand-btn" onClick={viewOnHand}>
+            🖐️ Try it on your hand
+          </button>
+        )}
         <button
           className={`shutter${grab !== 'idle' ? ' is-holding' : ''}`}
           onPointerDown={onHoldStart}
@@ -262,6 +295,7 @@ export default function Mobile() {
       </div>
 
       {toast && <div className="toast glass">{toast}</div>}
+      {handAR && <ARHandViewer imageSrc={handAR.src} onClose={closeHandAR} />}
     </div>
   );
 }
